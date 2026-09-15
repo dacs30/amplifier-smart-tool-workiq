@@ -120,11 +120,18 @@ confirmation. See [`examples`](examples/) for starting profiles.
 
 ## Copilot CLI
 
-Install the executable globally from a local checkout:
+Install the executable globally from the public Git repository; no clone is
+required:
 
 ```powershell
-uv tool install --editable C:\src\amplifier-smart-tool-workiq
+uv tool install `
+  "git+https://github.com/dacs30/amplifier-smart-tool-workiq.git"
 ```
+
+If dependency resolution fails because of network or certificate policy,
+configure uv to use your organization's approved Python package index or
+certificate settings, then retry. Do not publish organization-specific package
+feed URLs or credentials in issues or logs.
 
 Install the shared Smart Tools catalog skill globally:
 
@@ -143,9 +150,8 @@ workiq-smart-tool doctor --local-only
 copilot skill list
 ```
 
-`--editable` is useful during development because changes in the checkout are
-immediately reflected in the installed executable. For a fixed local install,
-omit `--editable`.
+For development from a local checkout, add `--editable` and replace the Git URL
+with the checkout path.
 
 ```text
 Find and use a Smart Tool to prepare my Microsoft 365 daily briefing.

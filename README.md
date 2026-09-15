@@ -81,8 +81,31 @@ written to stderr.
 
 ## Copilot CLI
 
-This repository includes the project skill `workiq-smart-tool`. Start Copilot
-CLI from the repository root, or run `/skills reload` in an existing session.
+Install the executable globally from a local checkout:
+
+```powershell
+uv tool install --editable C:\src\amplifier-smart-tool-workiq
+```
+
+Install the skill personally so every Copilot CLI session can discover it:
+
+```powershell
+copilot skill add `
+  C:\src\amplifier-smart-tool-workiq\.github\skills\workiq-smart-tool\SKILL.md
+```
+
+The skill is copied to `~\.copilot\skills\workiq-smart-tool\SKILL.md`. Restart
+Copilot CLI, or run `/skills reload` in an existing session. Verify the global
+installation with:
+
+```powershell
+workiq-smart-tool doctor --local-only
+copilot skill list
+```
+
+`--editable` is useful during development because changes in the checkout are
+immediately reflected in the installed executable. For a fixed local install,
+omit `--editable`.
 
 ```text
 Use /workiq-smart-tool to prepare my daily briefing.

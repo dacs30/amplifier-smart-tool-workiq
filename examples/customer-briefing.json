@@ -1,0 +1,10 @@
+{
+  "description": "Prepare a briefing from Microsoft 365 context for a customer or account.",
+  "format": 1,
+  "inputs": [
+    "customer",
+    "meeting_date"
+  ],
+  "name": "customer-briefing",
+  "prompt": "Prepare a briefing for {customer} ahead of the engagement on {meeting_date}. Summarize recent interactions, active opportunities or workstreams, commitments, concerns, relevant documents, key people, and recommended discussion points. Distinguish confirmed facts from inference."
+}

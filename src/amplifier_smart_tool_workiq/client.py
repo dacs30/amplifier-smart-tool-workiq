@@ -84,7 +84,7 @@ class WorkIqMcpClient:
                     "capabilities": {},
                     "clientInfo": {
                         "name": "amplifier-smart-tool-workiq",
-                        "version": "0.1.0",
+                        "version": "0.2.0",
                     },
                 },
             )
@@ -281,6 +281,15 @@ class WorkIqMcpClient:
                 safe,
                 "Review https://github.com/microsoft/work-iq, then explicitly "
                 "run 'workiq-smart-tool accept-eula --yes'.",
+                details={
+                    "requires_confirmation": True,
+                    "confirmation_type": "legal_terms",
+                    "terms_url": "https://github.com/microsoft/work-iq",
+                    "action": {
+                        "capability": "accept-eula",
+                        "arguments": ["--yes"],
+                    },
+                },
             )
         if "policy" in lowered or "forbidden" in lowered:
             return WorkIqError(

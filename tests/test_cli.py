@@ -48,6 +48,13 @@ class CliTests(unittest.TestCase):
         self.assertNotEqual(completed.returncode, 0)
         self.assertEqual(document["error"]["code"], "confirmation_required")
 
+    def test_workflow_requires_a_subcommand(self):
+        completed = self.run_cli("workflow")
+        document = json.loads(completed.stdout)
+
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertEqual(document["error"]["code"], "no_capability")
+
 
 if __name__ == "__main__":
     unittest.main()

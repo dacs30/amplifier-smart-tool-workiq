@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from typing import Any
 
 _BEARER_RE = re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+")
 _TOKEN_FIELD_RE = re.compile(
@@ -19,17 +20,29 @@ def sanitize(text: str) -> str:
 class WorkIqError(RuntimeError):
     """Actionable failure returned by the Work IQ integration."""
 
-    def __init__(self, code: str, message: str, remedy: str, *, retryable: bool = False):
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        remedy: str,
+        *,
+        retryable: bool = False,
+        details: dict[str, Any] | None = None,
+    ):
         super().__init__(message)
         self.code = code
         self.message = sanitize(message)
         self.remedy = remedy
         self.retryable = retryable
+        self.details = details
 
     def as_dict(self) -> dict[str, object]:
-        return {
+        document: dict[str, object] = {
             "code": self.code,
             "message": self.message,
             "remedy": self.remedy,
             "retryable": self.retryable,
         }
+        if self.details is not None:
+            document["details"] = self.details
+        return document

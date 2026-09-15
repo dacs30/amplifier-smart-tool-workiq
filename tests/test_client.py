@@ -46,6 +46,15 @@ class WorkIqMcpClientTests(unittest.TestCase):
         )
         self.assertEqual(error.code, "eula_required")
         self.assertIn("accept-eula --yes", error.remedy)
+        self.assertTrue(error.details["requires_confirmation"])
+        self.assertEqual(
+            error.details["terms_url"],
+            "https://github.com/microsoft/work-iq",
+        )
+        self.assertEqual(
+            error.details["action"],
+            {"capability": "accept-eula", "arguments": ["--yes"]},
+        )
 
     def test_failed_initialization_closes_process(self):
         client = WorkIqMcpClient(

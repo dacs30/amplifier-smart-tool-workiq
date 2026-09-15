@@ -23,6 +23,7 @@ client. It does not request, inspect, store, or print access tokens.
 | `fetch` | Model-backed | Fetch an explicitly allowed Microsoft 365 resource path. |
 | `daily-briefing` | Model-backed | Build a prioritized daily work briefing. |
 | `meeting-prep` | Model-backed | Prepare context for a specific meeting. |
+| `workflow` | Mixed | Create and run reusable domain-specific workflows. |
 
 No create, update, delete, or action capability is exposed. Work IQ tenant
 policy also blocks mutation operations by default.
@@ -79,6 +80,44 @@ uv run --no-project src\amplifier_smart_tool_workiq\cli.py fetch `
 Every command emits exactly one JSON document to stdout. Diagnostics are
 written to stderr.
 
+## Domain-specific workflows
+
+Workflow profiles let users package repeatable Work IQ expertise without
+writing Python. A profile is a versioned JSON prompt template with declared
+inputs:
+
+```json
+{
+  "format": 1,
+  "name": "project-status",
+  "description": "Summarize current project status and risks.",
+  "inputs": ["project", "review_date"],
+  "prompt": "Prepare a status review for {project} as of {review_date}."
+}
+```
+
+Validate and persist it:
+
+```powershell
+workiq-smart-tool workflow validate --file .\project-status.json
+workiq-smart-tool workflow create `
+  --file .\project-status.json `
+  --confirmed
+```
+
+Run it from any directory:
+
+```powershell
+workiq-smart-tool workflow run `
+  --name project-status `
+  --input project="Project Alpha" `
+  --input review_date=2026-09-15
+```
+
+Profiles are stored in the user's configuration directory, separate from the
+installed package. Creating, replacing, or deleting a profile requires explicit
+confirmation. See [`examples`](examples/) for starting profiles.
+
 ## Copilot CLI
 
 Install the executable globally from a local checkout:
@@ -87,16 +126,17 @@ Install the executable globally from a local checkout:
 uv tool install --editable C:\src\amplifier-smart-tool-workiq
 ```
 
-Install the skill personally so every Copilot CLI session can discover it:
+Install the shared Smart Tools catalog skill globally:
 
 ```powershell
-copilot skill add `
-  C:\src\amplifier-smart-tool-workiq\.github\skills\workiq-smart-tool\SKILL.md
+npx skills add microsoft/amplifier-smart-tools-catalog `
+  --skill amplifier-smart-tools-catalog `
+  --agent github-copilot `
+  --global
 ```
 
-The skill is copied to `~\.copilot\skills\workiq-smart-tool\SKILL.md`. Restart
-Copilot CLI, or run `/skills reload` in an existing session. Verify the global
-installation with:
+Restart Copilot CLI, or run `/skills reload` in an existing session. Verify the
+global installation with:
 
 ```powershell
 workiq-smart-tool doctor --local-only
@@ -108,15 +148,16 @@ immediately reflected in the installed executable. For a fixed local install,
 omit `--editable`.
 
 ```text
-Use /workiq-smart-tool to prepare my daily briefing.
+Find and use a Smart Tool to prepare my Microsoft 365 daily briefing.
 ```
 
 ```text
-Use /workiq-smart-tool to prepare me for tomorrow's architecture review.
+Find and use a Smart Tool to prepare me for tomorrow's architecture review.
 ```
 
-Copilot selects the Smart Tool capability and invokes its CLI. The Smart Tool,
-not the calling agent, owns the Work IQ workflow.
+The shared catalog skill selects the Work IQ Smart Tool and reads its installed
+CLI help before invocation. The Smart Tool, not the calling agent, owns the Work
+IQ workflow.
 
 ## Authentication behavior
 

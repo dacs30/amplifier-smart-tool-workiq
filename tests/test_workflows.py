@@ -63,6 +63,29 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("Architecture review", arguments["question"])
         self.assertIn("2026-09-16", arguments["question"])
 
+    def test_ask_wraps_all_questions_in_read_only_constraints(self):
+        client = RecordingClient()
+        service = WorkIqService(client)
+
+        service.ask("Summarize the project.")
+
+        _, arguments = client.calls[0]
+        self.assertIn("read-only workplace intelligence request", arguments["question"])
+        self.assertIn("BEGIN_UNTRUSTED_REQUEST_", arguments["question"])
+        self.assertIn("END_UNTRUSTED_REQUEST_", arguments["question"])
+        self.assertIn("Summarize the project.", arguments["question"])
+
+    def test_ask_uses_an_unpredictable_boundary_per_request(self):
+        client = RecordingClient()
+        service = WorkIqService(client)
+
+        service.ask("First")
+        service.ask("Second")
+
+        first = client.calls[0][1]["question"].splitlines()[6]
+        second = client.calls[1][1]["question"].splitlines()[6]
+        self.assertNotEqual(first, second)
+
 
 if __name__ == "__main__":
     unittest.main()

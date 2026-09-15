@@ -1,6 +1,6 @@
 import unittest
 
-from amplifier_smart_tool_workiq.errors import sanitize
+from amplifier_smart_tool_workiq.errors import WorkIqError, sanitize
 
 
 class SanitizationTests(unittest.TestCase):
@@ -11,6 +11,19 @@ class SanitizationTests(unittest.TestCase):
         self.assertNotIn("abc.def", value)
         self.assertNotIn("secret-value", value)
         self.assertIn("[REDACTED]", value)
+
+    def test_error_includes_optional_structured_details(self):
+        error = WorkIqError(
+            "confirmation_required",
+            "Confirmation is required.",
+            "Ask the user.",
+            details={"requires_confirmation": True},
+        )
+
+        self.assertEqual(
+            error.as_dict()["details"],
+            {"requires_confirmation": True},
+        )
 
 
 if __name__ == "__main__":

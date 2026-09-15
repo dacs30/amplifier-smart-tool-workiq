@@ -18,6 +18,11 @@ if __package__ in (None, ""):
 from amplifier_smart_tool_workiq.client import WorkIqMcpClient  # noqa: E402
 from amplifier_smart_tool_workiq.command import run_workiq  # noqa: E402
 from amplifier_smart_tool_workiq.errors import WorkIqError, sanitize  # noqa: E402
+from amplifier_smart_tool_workiq.profiles import (  # noqa: E402
+    WorkflowProfile,
+    WorkflowStore,
+    parse_input_values,
+)
 from amplifier_smart_tool_workiq.workflows import WorkIqService  # noqa: E402
 
 
@@ -182,6 +187,79 @@ def _meeting_prep(args: argparse.Namespace) -> int:
     return _success("meeting-prep", "model-backed", result)
 
 
+def _workflow_validate(args: argparse.Namespace) -> int:
+    profile = WorkflowProfile.read(Path(args.file))
+    return _success("workflow validate", "deterministic", profile.to_dict())
+
+
+def _workflow_create(args: argparse.Namespace) -> int:
+    if not args.confirmed:
+        raise WorkIqError(
+            "confirmation_required",
+            "Creating a persistent workflow requires explicit confirmation.",
+            "Review the profile, then rerun with --confirmed.",
+        )
+    profile = WorkflowProfile.read(Path(args.file))
+    path = WorkflowStore().create(profile, replace=args.replace)
+    return _success(
+        "workflow create",
+        "deterministic",
+        {"profile": profile.to_dict(), "path": str(path)},
+    )
+
+
+def _workflow_list(_: argparse.Namespace) -> int:
+    profiles = WorkflowStore().list()
+    result = [
+        {
+            "name": profile.name,
+            "description": profile.description,
+            "inputs": list(profile.inputs),
+        }
+        for profile in profiles
+    ]
+    return _success("workflow list", "deterministic", {"workflows": result})
+
+
+def _workflow_show(args: argparse.Namespace) -> int:
+    profile = WorkflowStore().get(args.name)
+    return _success("workflow show", "deterministic", profile.to_dict())
+
+
+def _workflow_delete(args: argparse.Namespace) -> int:
+    if not args.confirmed:
+        raise WorkIqError(
+            "confirmation_required",
+            f"Deleting workflow '{args.name}' requires explicit confirmation.",
+            "Review the target, then rerun with --confirmed.",
+        )
+    WorkflowStore().delete(args.name)
+    return _success(
+        "workflow delete",
+        "deterministic",
+        {"deleted": args.name},
+    )
+
+
+def _workflow_run(args: argparse.Namespace) -> int:
+    profile = WorkflowStore().get(args.name)
+    values = parse_input_values(args.input)
+    question = profile.render(values)
+    result = _with_service(
+        args,
+        lambda service: service.ask(
+            question,
+            agent_id=args.agent_id,
+            time_zone=args.time_zone,
+        ),
+    )
+    return _success(
+        "workflow run",
+        "model-backed",
+        {"workflow": profile.name, "response": result},
+    )
+
+
 def _add_runtime_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--account",
@@ -211,7 +289,8 @@ def build_parser() -> argparse.ArgumentParser:
             "  ask             [model-backed] Ask a read-only question.\n"
             "  fetch           [model-backed] Fetch bounded entity paths.\n"
             "  daily-briefing  [model-backed] Prepare a daily briefing.\n"
-            "  meeting-prep    [model-backed] Prepare for a meeting."
+            "  meeting-prep    [model-backed] Prepare for a meeting.\n"
+            "  workflow        Create and run domain-specific workflows."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -290,6 +369,53 @@ def build_parser() -> argparse.ArgumentParser:
     meeting.add_argument("--time-zone")
     meeting.set_defaults(handler=_meeting_prep)
 
+    workflow = commands.add_parser(
+        "workflow", help="Create and run domain-specific Work IQ workflows."
+    )
+    workflow_commands = workflow.add_subparsers(dest="workflow_capability")
+
+    workflow_validate = workflow_commands.add_parser(
+        "validate", help="[deterministic] Validate a workflow profile file."
+    )
+    workflow_validate.add_argument("--file", required=True)
+    workflow_validate.set_defaults(handler=_workflow_validate)
+
+    workflow_create = workflow_commands.add_parser(
+        "create", help="[deterministic] Persist a validated workflow profile."
+    )
+    workflow_create.add_argument("--file", required=True)
+    workflow_create.add_argument("--replace", action="store_true")
+    workflow_create.add_argument("--confirmed", action="store_true")
+    workflow_create.set_defaults(handler=_workflow_create)
+
+    workflow_list = workflow_commands.add_parser(
+        "list", help="[deterministic] List persisted workflow profiles."
+    )
+    workflow_list.set_defaults(handler=_workflow_list)
+
+    workflow_show = workflow_commands.add_parser(
+        "show", help="[deterministic] Show one workflow profile."
+    )
+    workflow_show.add_argument("--name", required=True)
+    workflow_show.set_defaults(handler=_workflow_show)
+
+    workflow_delete = workflow_commands.add_parser(
+        "delete", help="[deterministic] Delete a workflow profile."
+    )
+    workflow_delete.add_argument("--name", required=True)
+    workflow_delete.add_argument("--confirmed", action="store_true")
+    workflow_delete.set_defaults(handler=_workflow_delete)
+
+    workflow_run = workflow_commands.add_parser(
+        "run", help="[model-backed] Run a persisted workflow profile."
+    )
+    _add_runtime_options(workflow_run)
+    workflow_run.add_argument("--name", required=True)
+    workflow_run.add_argument("--input", action="append", default=[])
+    workflow_run.add_argument("--agent-id")
+    workflow_run.add_argument("--time-zone")
+    workflow_run.set_defaults(handler=_workflow_run)
+
     return parser
 
 
@@ -297,7 +423,10 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     try:
         args = parser.parse_args(argv)
-        if not getattr(args, "capability", None):
+        if not getattr(args, "capability", None) or (
+            args.capability == "workflow"
+            and not getattr(args, "workflow_capability", None)
+        ):
             return _emit_error(
                 WorkIqError(
                     "no_capability",

@@ -1,0 +1,10 @@
+{
+  "description": "Summarize current status, decisions, risks, and next actions for a project.",
+  "format": 1,
+  "inputs": [
+    "project",
+    "review_date"
+  ],
+  "name": "project-status",
+  "prompt": "Prepare a project status review for {project} as of {review_date}. Find relevant meetings, email, Teams discussions, and documents. Summarize progress, recent decisions, unresolved risks, owners when available, and the next five actions. Cite the Microsoft 365 evidence used for each conclusion."
+}

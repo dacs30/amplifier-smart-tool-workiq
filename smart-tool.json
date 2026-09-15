@@ -1,0 +1,13 @@
+{
+  "manifest": "src/amplifier_smart_tool_workiq/SMART_TOOL.md",
+  "cli_argv": [
+    "uv",
+    "run",
+    "--no-project",
+    "src/amplifier_smart_tool_workiq/cli.py"
+  ],
+  "deterministic_smoke": [
+    "doctor",
+    "--local-only"
+  ]
+}

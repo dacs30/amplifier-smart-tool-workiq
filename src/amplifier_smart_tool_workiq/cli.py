@@ -1,0 +1,326 @@
+#!/usr/bin/env python3
+"""CLI adapter for the Amplifier Smart Tool for Work IQ."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import shutil
+import subprocess
+import sys
+from datetime import date
+from pathlib import Path
+from typing import Any
+
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from amplifier_smart_tool_workiq.client import WorkIqMcpClient  # noqa: E402
+from amplifier_smart_tool_workiq.command import run_workiq  # noqa: E402
+from amplifier_smart_tool_workiq.errors import WorkIqError, sanitize  # noqa: E402
+from amplifier_smart_tool_workiq.workflows import WorkIqService  # noqa: E402
+
+
+class _Parser(argparse.ArgumentParser):
+    def error(self, message: str) -> None:
+        _emit_error(
+            WorkIqError(
+                "bad_invocation",
+                message,
+                "Run 'workiq-smart-tool --help' for usage.",
+            ),
+            exit_code=2,
+        )
+        raise SystemExit(2)
+
+
+def _emit(document: dict[str, Any]) -> None:
+    json.dump(document, sys.stdout, ensure_ascii=True, sort_keys=True)
+    sys.stdout.write("\n")
+
+
+def _emit_error(error: WorkIqError, *, exit_code: int = 1) -> int:
+    _emit({"error": error.as_dict()})
+    return exit_code
+
+
+def _success(capability: str, kind: str, result: Any) -> int:
+    _emit({"capability": capability, "kind": kind, "result": result})
+    return 0
+
+
+def _manifest(_: argparse.Namespace) -> int:
+    content = Path(__file__).with_name("SMART_TOOL.md").read_text(encoding="utf-8")
+    return _success("manifest", "deterministic", {"content": content})
+
+
+def _doctor(args: argparse.Namespace) -> int:
+    checks = {
+        "python": {
+            "ok": sys.version_info >= (3, 11),
+            "version": ".".join(map(str, sys.version_info[:3])),
+        },
+        "node": {"ok": shutil.which("node") is not None},
+        "npx": {"ok": shutil.which("npx") is not None},
+        "workiq": {"ok": shutil.which("workiq") is not None},
+    }
+    if args.local_only:
+        checks["workiq"]["note"] = (
+            "A global Work IQ install is optional when npx is available."
+        )
+    ok = checks["python"]["ok"] and (
+        checks["workiq"]["ok"] or checks["npx"]["ok"]
+    )
+    return _success("doctor", "deterministic", {"ok": ok, "checks": checks})
+
+
+def _authenticate(args: argparse.Namespace) -> int:
+    command = ["auth", "login"]
+    if args.account:
+        command.extend(["--account", args.account])
+    completed = run_workiq(command, timeout=args.timeout, interactive=True)
+    if completed.returncode != 0:
+        raise WorkIqError(
+            "authentication_failed",
+            f"Work IQ authentication exited with code {completed.returncode}.",
+            "Review the interactive sign-in output and tenant admin consent.",
+        )
+    return _success(
+        "authenticate",
+        "setup",
+        {
+            "authenticated": True,
+            "account": args.account,
+            "message": "Work IQ completed its authentication flow.",
+        },
+    )
+
+
+def _accept_eula(args: argparse.Namespace) -> int:
+    if not args.yes:
+        raise WorkIqError(
+            "confirmation_required",
+            "The Work IQ EULA was not accepted.",
+            "Review https://github.com/microsoft/work-iq, then rerun "
+            "'workiq-smart-tool accept-eula --yes' to accept it.",
+        )
+    command = ["accept-eula"]
+    if args.account:
+        command.extend(["--account", args.account])
+    completed = run_workiq(command, timeout=args.timeout)
+    if completed.returncode != 0:
+        detail = completed.stderr.strip() or completed.stdout.strip()
+        raise WorkIqError(
+            "eula_acceptance_failed",
+            sanitize(detail)
+            or f"Work IQ exited with code {completed.returncode}.",
+            "Review the Work IQ client output and retry.",
+        )
+    return _success(
+        "accept-eula",
+        "setup",
+        {
+            "accepted": True,
+            "message": "The official Work IQ client recorded EULA acceptance.",
+        },
+    )
+
+
+def _with_service(
+    args: argparse.Namespace,
+    operation: Any,
+) -> Any:
+    with WorkIqMcpClient(account=args.account, timeout=args.timeout) as client:
+        return operation(WorkIqService(client))
+
+
+def _agents(args: argparse.Namespace) -> int:
+    result = _with_service(args, lambda service: service.list_agents())
+    return _success("agents", "model-backed", result)
+
+
+def _ask(args: argparse.Namespace) -> int:
+    result = _with_service(
+        args,
+        lambda service: service.ask(
+            args.question,
+            agent_id=args.agent_id,
+            time_zone=args.time_zone,
+            conversation_id=args.conversation_id,
+            file_urls=args.file_url,
+        ),
+    )
+    return _success("ask", "model-backed", result)
+
+
+def _fetch(args: argparse.Namespace) -> int:
+    result = _with_service(args, lambda service: service.fetch(args.path))
+    return _success("fetch", "model-backed", result)
+
+
+def _daily_briefing(args: argparse.Namespace) -> int:
+    result = _with_service(
+        args,
+        lambda service: service.daily_briefing(
+            briefing_date=date.fromisoformat(args.date),
+            time_zone=args.time_zone,
+        ),
+    )
+    return _success("daily-briefing", "model-backed", result)
+
+
+def _meeting_prep(args: argparse.Namespace) -> int:
+    meeting_date = date.fromisoformat(args.date) if args.date else None
+    result = _with_service(
+        args,
+        lambda service: service.meeting_prep(
+            meeting=args.meeting,
+            meeting_date=meeting_date,
+            time_zone=args.time_zone,
+        ),
+    )
+    return _success("meeting-prep", "model-backed", result)
+
+
+def _add_runtime_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--account",
+        help="Cached Microsoft 365 account email to pass to Work IQ.",
+    )
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=120,
+        help="Maximum seconds to wait for Work IQ (default: 120).",
+    )
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = _Parser(
+        prog="workiq-smart-tool",
+        description=(
+            "Safe Microsoft 365 workflows over the official Work IQ MCP server."
+        ),
+        epilog=(
+            "Capabilities:\n"
+            "  doctor          [deterministic] Check local prerequisites.\n"
+            "  manifest        [deterministic] Return selection metadata.\n"
+            "  accept-eula     [setup] Accept the Work IQ EULA.\n"
+            "  authenticate    [setup] Start Microsoft 365 sign-in.\n"
+            "  agents          [model-backed] List available agents.\n"
+            "  ask             [model-backed] Ask a read-only question.\n"
+            "  fetch           [model-backed] Fetch bounded entity paths.\n"
+            "  daily-briefing  [model-backed] Prepare a daily briefing.\n"
+            "  meeting-prep    [model-backed] Prepare for a meeting."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    commands = parser.add_subparsers(dest="capability")
+
+    doctor = commands.add_parser(
+        "doctor", help="[deterministic] Check local prerequisites."
+    )
+    doctor.add_argument(
+        "--local-only",
+        action="store_true",
+        help="Do not make network or authentication checks.",
+    )
+    doctor.set_defaults(handler=_doctor)
+
+    manifest = commands.add_parser(
+        "manifest", help="[deterministic] Return the canonical manifest."
+    )
+    manifest.set_defaults(handler=_manifest)
+
+    accept_eula = commands.add_parser(
+        "accept-eula", help="[setup] Explicitly accept the Work IQ EULA."
+    )
+    _add_runtime_options(accept_eula)
+    accept_eula.add_argument(
+        "--yes",
+        action="store_true",
+        help="Confirm that you reviewed and accept Microsoft's Work IQ EULA.",
+    )
+    accept_eula.set_defaults(handler=_accept_eula)
+
+    authenticate = commands.add_parser(
+        "authenticate", help="[setup] Start the Work IQ sign-in flow."
+    )
+    _add_runtime_options(authenticate)
+    authenticate.set_defaults(handler=_authenticate)
+
+    agents = commands.add_parser(
+        "agents", help="[model-backed] List available Copilot agents."
+    )
+    _add_runtime_options(agents)
+    agents.set_defaults(handler=_agents)
+
+    ask = commands.add_parser(
+        "ask", help="[model-backed] Ask a read-only workplace question."
+    )
+    _add_runtime_options(ask)
+    ask.add_argument("--question", required=True)
+    ask.add_argument("--agent-id")
+    ask.add_argument("--time-zone")
+    ask.add_argument("--conversation-id")
+    ask.add_argument("--file-url", action="append", default=[])
+    ask.set_defaults(handler=_ask)
+
+    fetch = commands.add_parser(
+        "fetch", help="[model-backed] Fetch bounded Microsoft 365 entities."
+    )
+    _add_runtime_options(fetch)
+    fetch.add_argument("--path", action="append", required=True)
+    fetch.set_defaults(handler=_fetch)
+
+    briefing = commands.add_parser(
+        "daily-briefing", help="[model-backed] Prepare a daily work briefing."
+    )
+    _add_runtime_options(briefing)
+    briefing.add_argument("--date", default=date.today().isoformat())
+    briefing.add_argument("--time-zone")
+    briefing.set_defaults(handler=_daily_briefing)
+
+    meeting = commands.add_parser(
+        "meeting-prep", help="[model-backed] Prepare for a meeting."
+    )
+    _add_runtime_options(meeting)
+    meeting.add_argument("--meeting", required=True)
+    meeting.add_argument("--date")
+    meeting.add_argument("--time-zone")
+    meeting.set_defaults(handler=_meeting_prep)
+
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    try:
+        args = parser.parse_args(argv)
+        if not getattr(args, "capability", None):
+            return _emit_error(
+                WorkIqError(
+                    "no_capability",
+                    "No capability was specified.",
+                    "Run 'workiq-smart-tool --help' to list capabilities.",
+                ),
+                exit_code=2,
+            )
+        return args.handler(args)
+    except ValueError as error:
+        return _emit_error(
+            WorkIqError(
+                "invalid_value",
+                sanitize(str(error)),
+                "Check date values and command arguments, then retry.",
+            ),
+            exit_code=2,
+        )
+    except WorkIqError as error:
+        return _emit_error(error)
+    except (BrokenPipeError, KeyboardInterrupt):
+        return 130
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

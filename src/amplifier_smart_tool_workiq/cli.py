@@ -60,18 +60,25 @@ def _manifest(_: argparse.Namespace) -> int:
 
 
 def _doctor(args: argparse.Namespace) -> int:
+    workiq_path = shutil.which("workiq")
+    npx_path = shutil.which("npx")
     checks = {
         "python": {
             "ok": sys.version_info >= (3, 11),
             "version": ".".join(map(str, sys.version_info[:3])),
         },
         "node": {"ok": shutil.which("node") is not None},
-        "npx": {"ok": shutil.which("npx") is not None},
-        "workiq": {"ok": shutil.which("workiq") is not None},
+        "npx": {"ok": npx_path is not None},
+        "workiq": {"ok": workiq_path is not None},
     }
-    if args.local_only:
+    if workiq_path:
+        checks["workiq"]["launcher"] = workiq_path
+    elif npx_path:
+        checks["workiq"]["launcher"] = "npx fallback"
         checks["workiq"]["note"] = (
-            "A global Work IQ install is optional when npx is available."
+            "The npx fallback works, but a global Work IQ installation reduces "
+            "CLI startup latency. Install it with "
+            "'npm install -g @microsoft/workiq'."
         )
     ok = checks["python"]["ok"] and (
         checks["workiq"]["ok"] or checks["npx"]["ok"]

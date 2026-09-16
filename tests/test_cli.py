@@ -4,7 +4,13 @@ import json
 import subprocess
 import sys
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
+
+from amplifier_smart_tool_workiq import cli
 
 
 class CliTests(unittest.TestCase):
@@ -33,6 +39,26 @@ class CliTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 0)
         self.assertEqual(document["capability"], "doctor")
         self.assertEqual(document["kind"], "deterministic")
+
+    def test_doctor_recommends_global_workiq_for_npx_fallback(self):
+        paths = {
+            "workiq": None,
+            "npx": "C:\\Program Files\\nodejs\\npx.cmd",
+            "node": "C:\\Program Files\\nodejs\\node.exe",
+        }
+        output = StringIO()
+
+        with (
+            patch.object(cli.shutil, "which", side_effect=paths.get),
+            redirect_stdout(output),
+        ):
+            exit_code = cli._doctor(SimpleNamespace(local_only=True))
+
+        document = json.loads(output.getvalue())
+        workiq = document["result"]["checks"]["workiq"]
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(workiq["launcher"], "npx fallback")
+        self.assertIn("npm install -g @microsoft/workiq", workiq["note"])
 
     def test_bad_invocation_is_nonzero_json(self):
         completed = self.run_cli("__not_a_capability__")

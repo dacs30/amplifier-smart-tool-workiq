@@ -39,3 +39,13 @@ Review Microsoft's Work IQ EULA, then run `accept-eula --yes` explicitly. Run
 `authenticate` once to start the official Work IQ sign-in flow. Work IQ persists
 the selected account and attempts silent authentication in later sessions. Use
 `--account` to select a particular cached account.
+
+For lower startup latency, install the official Work IQ CLI globally:
+
+```text
+npm install -g @microsoft/workiq
+```
+
+The Smart Tool automatically prefers the global `workiq` executable. It falls
+back to `npx -y @microsoft/workiq@latest` when a global installation is not
+available. Run `doctor --local-only` to see which launcher will be used.

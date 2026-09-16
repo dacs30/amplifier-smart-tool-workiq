@@ -35,6 +35,22 @@ policy also blocks mutation operations by default.
 - Microsoft 365 tenant access enabled for Work IQ
 - Admin consent for the Work IQ application
 
+For lower startup latency, install the official Work IQ CLI globally:
+
+```powershell
+npm install -g @microsoft/workiq
+```
+
+The Smart Tool automatically prefers the global `workiq` executable and falls
+back to `npx -y @microsoft/workiq@latest` when it is unavailable. Check the
+selected launcher with:
+
+```powershell
+workiq-smart-tool doctor --local-only
+```
+
+Keep a global installation current with `npm update -g @microsoft/workiq`.
+
 The first authentication is interactive:
 
 ```powershell

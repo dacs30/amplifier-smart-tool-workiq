@@ -19,10 +19,13 @@ client. It does not request, inspect, store, or print access tokens.
 | `accept-eula` | Setup | Explicitly accept Microsoft's Work IQ EULA. |
 | `authenticate` | Setup | Start the official Work IQ interactive sign-in flow. |
 | `agents` | Model-backed | List Microsoft 365 Copilot agents available to the user. |
+| `discover` | Service-backed | Find Microsoft 365 paths for a data need. |
+| `schema` | Service-backed | Inspect the read-only fetch schema for a path. |
 | `ask` | Model-backed | Ask Work IQ a read-only workplace question. |
 | `fetch` | Model-backed | Fetch an explicitly allowed Microsoft 365 resource path. |
-| `daily-briefing` | Model-backed | Build a prioritized daily work briefing. |
+| `daily-briefing` | Mixed | Build a fast structured or comprehensive synthesized briefing. |
 | `meeting-prep` | Model-backed | Prepare context for a specific meeting. |
+| `query` | Mixed | Validate and execute bounded read-only data plans. |
 | `workflow` | Mixed | Create and run reusable domain-specific workflows. |
 
 No create, update, delete, or action capability is exposed. Work IQ tenant
@@ -79,7 +82,17 @@ uv run --no-project src\amplifier_smart_tool_workiq\cli.py doctor
 ```powershell
 uv run --no-project src\amplifier_smart_tool_workiq\cli.py daily-briefing `
   --date 2026-09-15 `
-  --time-zone America\New_York
+  --time-zone America/New_York `
+  --mode comprehensive
+```
+
+For a lower-latency calendar-and-email context bundle without model synthesis:
+
+```powershell
+workiq-smart-tool daily-briefing `
+  --date 2026-09-15 `
+  --time-zone America/New_York `
+  --mode fast
 ```
 
 ```powershell
@@ -95,6 +108,68 @@ uv run --no-project src\amplifier_smart_tool_workiq\cli.py fetch `
 
 Every command emits exactly one JSON document to stdout. Diagnostics are
 written to stderr.
+
+## Resource discovery and schemas
+
+Find candidate read-only Microsoft 365 paths from a natural-language need:
+
+```powershell
+workiq-smart-tool discover --query "recent unread email"
+```
+
+Inspect the fetch schema before constructing a query:
+
+```powershell
+workiq-smart-tool schema `
+  --path "/me/messages" `
+  --format jsonschema
+```
+
+These capabilities delegate discovery to the official Work IQ MCP server. The
+Smart Tool still validates every path before schema inspection or execution.
+Only fetch schemas are exposed; create, update, delete, action, and function
+operations remain outside the public surface.
+
+## Read-only data plans
+
+Data plans make the exact Microsoft 365 reads reviewable and reusable:
+
+```json
+{
+  "format": 1,
+  "name": "daily-context",
+  "description": "Fetch bounded calendar and mail context.",
+  "requests": [
+    {
+      "name": "meetings",
+      "path": "/me/events?$select=id,subject,start,end&$top=20"
+    },
+    {
+      "name": "messages",
+      "path": "/me/messages?$select=id,subject,from,isRead&$top=25"
+    }
+  ]
+}
+```
+
+Validate locally without starting Work IQ:
+
+```powershell
+workiq-smart-tool query validate --file .\daily-context.json
+```
+
+Execute all requests in one bounded Work IQ fetch:
+
+```powershell
+workiq-smart-tool query run --file .\daily-context.json
+```
+
+Plans accept at most ten uniquely named requests. Paths must begin with
+`/me/`, `/users/`, or `/sites/`, include `$select`, and use `$top` values from
+1 through 100 when supplied. Absolute URLs, traversal, encoded separators, and
+sensitive authentication resources are rejected.
+
+See [`examples/daily-context.json`](examples/daily-context.json).
 
 ## Domain-specific workflows
 

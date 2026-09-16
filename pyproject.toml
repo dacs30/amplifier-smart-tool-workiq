@@ -4,10 +4,13 @@ build-backend = "hatchling.build"
 
 [project]
 name = "amplifier-smart-tool-workiq"
-version = "0.2.0"
+version = "0.3.0"
 description = "Safe, repeatable Microsoft 365 workflows over the official Work IQ MCP server."
 readme = "README.md"
 requires-python = ">=3.11"
+dependencies = [
+  "tzdata>=2025.2; platform_system == 'Windows'"
+]
 license = { text = "MIT" }
 authors = [
   { name = "Microsoft Corporation" }

@@ -18,7 +18,10 @@ class WorkIqMcpClientTests(unittest.TestCase):
             names = [tool["name"] for tool in client.list_tools()]
             result = client.call_tool("ask", {"question": "What changed?"})
 
-        self.assertEqual(names, ["ask", "fetch"])
+        self.assertEqual(
+            names,
+            ["ask", "fetch", "search_paths", "get_schema"],
+        )
         self.assertEqual(result["conversationId"], "conversation-1")
         self.assertEqual(result["response"], "Answer to: What changed?")
 

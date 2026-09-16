@@ -43,6 +43,8 @@ for line in sys.stdin:
                     "tools": [
                         {"name": "ask", "inputSchema": {"type": "object"}},
                         {"name": "fetch", "inputSchema": {"type": "object"}},
+                        {"name": "search_paths", "inputSchema": {"type": "object"}},
+                        {"name": "get_schema", "inputSchema": {"type": "object"}},
                     ]
                 },
             }
@@ -56,6 +58,26 @@ for line in sys.stdin:
             }
             result = {
                 "content": [{"type": "text", "text": json.dumps(response)}]
+            }
+        elif params["name"] == "search_paths":
+            result = {
+                "structuredContent": {
+                    "paths": [
+                        {
+                            "path": "/me/messages",
+                            "operations": ["fetch"],
+                        }
+                    ]
+                }
+            }
+        elif params["name"] == "get_schema":
+            result = {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "type Message = { id: string; subject: string };",
+                    }
+                ]
             }
         else:
             result = {

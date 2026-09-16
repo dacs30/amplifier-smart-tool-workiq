@@ -4,7 +4,11 @@ import unittest
 from datetime import date
 
 from amplifier_smart_tool_workiq.errors import WorkIqError
-from amplifier_smart_tool_workiq.workflows import WorkIqService, validate_fetch_path
+from amplifier_smart_tool_workiq.workflows import (
+    WorkIqService,
+    validate_fetch_path,
+    validate_resource_path,
+)
 
 
 class RecordingClient:
@@ -49,6 +53,52 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(arguments["timeZone"], "America/New_York")
         self.assertIn("2026-09-15", arguments["question"])
         self.assertIn("Do not send messages", arguments["question"])
+
+    def test_fast_daily_briefing_uses_one_bounded_fetch(self):
+        client = RecordingClient()
+        service = WorkIqService(client)
+
+        result = service.daily_briefing(
+            briefing_date=date(2026, 9, 15),
+            time_zone="America/New_York",
+            mode="fast",
+        )
+
+        name, arguments = client.calls[0]
+        self.assertEqual(name, "fetch")
+        self.assertEqual(len(arguments["entityUrls"]), 2)
+        self.assertIn("/me/calendarView?", arguments["entityUrls"][0])
+        self.assertIn("$select=", arguments["entityUrls"][0])
+        self.assertIn("$top=25", arguments["entityUrls"][1])
+        self.assertEqual(result["coverage"], ["calendar", "email"])
+        self.assertEqual(result["timeZone"], "America/New_York")
+
+    def test_discovers_paths_and_fetch_schema(self):
+        client = RecordingClient()
+        service = WorkIqService(client)
+
+        service.discover_paths("recent emails")
+        service.get_schema("/me/messages", schema_format="typescript")
+
+        self.assertEqual(
+            client.calls,
+            [
+                ("search_paths", {"query": "recent emails"}),
+                (
+                    "get_schema",
+                    {
+                        "path": "/me/messages",
+                        "operationType": "fetch",
+                        "format": "typescript",
+                    },
+                ),
+            ],
+        )
+
+    def test_resource_path_validation_does_not_require_select(self):
+        self.assertEqual(validate_resource_path("/me/messages"), "/me/messages")
+        with self.assertRaises(WorkIqError):
+            validate_resource_path("/groups")
 
     def test_meeting_prep_includes_target(self):
         client = RecordingClient()

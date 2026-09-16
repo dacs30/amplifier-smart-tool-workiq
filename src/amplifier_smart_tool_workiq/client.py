@@ -84,7 +84,7 @@ class WorkIqMcpClient:
                     "capabilities": {},
                     "clientInfo": {
                         "name": "amplifier-smart-tool-workiq",
-                        "version": "0.2.0",
+                        "version": "0.3.0",
                     },
                 },
             )

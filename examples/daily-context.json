@@ -1,0 +1,15 @@
+{
+  "description": "Fetch bounded calendar and mail context for a daily review.",
+  "format": 1,
+  "name": "daily-context",
+  "requests": [
+    {
+      "name": "meetings",
+      "path": "/me/events?$select=id,subject,start,end,organizer,attendees&$top=20"
+    },
+    {
+      "name": "messages",
+      "path": "/me/messages?$select=id,subject,from,receivedDateTime,isRead,importance&$top=25"
+    }
+  ]
+}

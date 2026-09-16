@@ -6,8 +6,8 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
-import subprocess
 import sys
+import time
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -17,6 +17,7 @@ if __package__ in (None, ""):
 
 from amplifier_smart_tool_workiq.client import WorkIqMcpClient  # noqa: E402
 from amplifier_smart_tool_workiq.command import run_workiq  # noqa: E402
+from amplifier_smart_tool_workiq.data_plans import DataPlan  # noqa: E402
 from amplifier_smart_tool_workiq.errors import WorkIqError, sanitize  # noqa: E402
 from amplifier_smart_tool_workiq.profiles import (  # noqa: E402
     WorkflowProfile,
@@ -59,7 +60,7 @@ def _manifest(_: argparse.Namespace) -> int:
     return _success("manifest", "deterministic", {"content": content})
 
 
-def _doctor(args: argparse.Namespace) -> int:
+def _doctor(_: argparse.Namespace) -> int:
     workiq_path = shutil.which("workiq")
     npx_path = shutil.which("npx")
     checks = {
@@ -151,6 +152,26 @@ def _agents(args: argparse.Namespace) -> int:
     return _success("agents", "model-backed", result)
 
 
+def _discover(args: argparse.Namespace) -> int:
+    result = _with_service(
+        args,
+        lambda service: service.discover_paths(args.query),
+    )
+    return _success("discover", "service-backed", result)
+
+
+def _schema(args: argparse.Namespace) -> int:
+    result = _with_service(
+        args,
+        lambda service: service.get_schema(
+            args.path,
+            schema_format=args.format,
+            agent_id=args.agent_id,
+        ),
+    )
+    return _success("schema", "service-backed", result)
+
+
 def _ask(args: argparse.Namespace) -> int:
     result = _with_service(
         args,
@@ -176,9 +197,11 @@ def _daily_briefing(args: argparse.Namespace) -> int:
         lambda service: service.daily_briefing(
             briefing_date=date.fromisoformat(args.date),
             time_zone=args.time_zone,
+            mode=args.mode,
         ),
     )
-    return _success("daily-briefing", "model-backed", result)
+    kind = "service-backed" if args.mode == "fast" else "model-backed"
+    return _success("daily-briefing", kind, result)
 
 
 def _meeting_prep(args: argparse.Namespace) -> int:
@@ -267,6 +290,30 @@ def _workflow_run(args: argparse.Namespace) -> int:
     )
 
 
+def _query_validate(args: argparse.Namespace) -> int:
+    plan = DataPlan.read(Path(args.file))
+    return _success("query validate", "deterministic", plan.to_dict())
+
+
+def _query_run(args: argparse.Namespace) -> int:
+    plan = DataPlan.read(Path(args.file))
+    started = time.perf_counter()
+    result = _with_service(
+        args,
+        lambda service: service.fetch(plan.paths()),
+    )
+    elapsed_ms = round((time.perf_counter() - started) * 1000)
+    return _success(
+        "query run",
+        "service-backed",
+        {
+            "plan": plan.to_dict(),
+            "data": result,
+            "timings": {"totalMs": elapsed_ms},
+        },
+    )
+
+
 def _add_runtime_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--account",
@@ -293,10 +340,13 @@ def build_parser() -> argparse.ArgumentParser:
             "  accept-eula     [setup] Accept the Work IQ EULA.\n"
             "  authenticate    [setup] Start Microsoft 365 sign-in.\n"
             "  agents          [model-backed] List available agents.\n"
+            "  discover        [service-backed] Discover Microsoft 365 paths.\n"
+            "  schema          [service-backed] Inspect a fetch schema.\n"
             "  ask             [model-backed] Ask a read-only question.\n"
             "  fetch           [model-backed] Fetch bounded entity paths.\n"
             "  daily-briefing  [model-backed] Prepare a daily briefing.\n"
             "  meeting-prep    [model-backed] Prepare for a meeting.\n"
+            "  query           Validate and run read-only data plans.\n"
             "  workflow        Create and run domain-specific workflows."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -341,6 +391,28 @@ def build_parser() -> argparse.ArgumentParser:
     _add_runtime_options(agents)
     agents.set_defaults(handler=_agents)
 
+    discover = commands.add_parser(
+        "discover",
+        help="[service-backed] Discover Microsoft 365 resource paths.",
+    )
+    _add_runtime_options(discover)
+    discover.add_argument("--query", required=True)
+    discover.set_defaults(handler=_discover)
+
+    schema = commands.add_parser(
+        "schema",
+        help="[service-backed] Inspect a read-only fetch schema.",
+    )
+    _add_runtime_options(schema)
+    schema.add_argument("--path", required=True)
+    schema.add_argument(
+        "--format",
+        choices=("jsonschema", "typescript", "cddl"),
+        default="jsonschema",
+    )
+    schema.add_argument("--agent-id")
+    schema.set_defaults(handler=_schema)
+
     ask = commands.add_parser(
         "ask", help="[model-backed] Ask a read-only workplace question."
     )
@@ -365,6 +437,12 @@ def build_parser() -> argparse.ArgumentParser:
     _add_runtime_options(briefing)
     briefing.add_argument("--date", default=date.today().isoformat())
     briefing.add_argument("--time-zone")
+    briefing.add_argument(
+        "--mode",
+        choices=("fast", "comprehensive"),
+        default="comprehensive",
+        help="Use bounded structured reads or full Work IQ synthesis.",
+    )
     briefing.set_defaults(handler=_daily_briefing)
 
     meeting = commands.add_parser(
@@ -423,6 +501,27 @@ def build_parser() -> argparse.ArgumentParser:
     workflow_run.add_argument("--time-zone")
     workflow_run.set_defaults(handler=_workflow_run)
 
+    query = commands.add_parser(
+        "query",
+        help="Validate and run bounded read-only data plans.",
+    )
+    query_commands = query.add_subparsers(dest="query_capability")
+
+    query_validate = query_commands.add_parser(
+        "validate",
+        help="[deterministic] Validate a data plan file.",
+    )
+    query_validate.add_argument("--file", required=True)
+    query_validate.set_defaults(handler=_query_validate)
+
+    query_run = query_commands.add_parser(
+        "run",
+        help="[service-backed] Execute a validated data plan.",
+    )
+    _add_runtime_options(query_run)
+    query_run.add_argument("--file", required=True)
+    query_run.set_defaults(handler=_query_run)
+
     return parser
 
 
@@ -433,6 +532,9 @@ def main(argv: list[str] | None = None) -> int:
         if not getattr(args, "capability", None) or (
             args.capability == "workflow"
             and not getattr(args, "workflow_capability", None)
+        ) or (
+            args.capability == "query"
+            and not getattr(args, "query_capability", None)
         ):
             return _emit_error(
                 WorkIqError(

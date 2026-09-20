@@ -1,5 +1,7 @@
 # Amplifier Smart Tool for Work IQ
 
+[Explore the website](https://dacs30.github.io/amplifier-smart-tool-workiq/)
+
 A library-first Smart Tool that packages safe, repeatable Microsoft 365
 workflows over the official [Microsoft Work IQ](https://github.com/microsoft/work-iq)
 MCP server.

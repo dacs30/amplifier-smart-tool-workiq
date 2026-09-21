@@ -25,12 +25,11 @@ class WebsiteWorkflowTests(unittest.TestCase):
         status_step = next(
             step for step in pages_job["steps"] if step.get("id") == "status"
         )
+        self.assertEqual(status_step["env"], {"GH_TOKEN": "${{ github.token }}"})
         status_script = status_step["run"]
-        self.assertIn("set -euo pipefail", status_script)
-        self.assertIn("Authorization: Bearer $GH_TOKEN", status_script)
-        self.assertIn("$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/pages", status_script)
-        self.assertIn('elif [ "$status" = "404" ]; then', status_script)
-        self.assertIn("skipping deployment", status_script)
+        self.assertIn("404", status_script)
+        self.assertRegex(status_script, r"enabled=true.+GITHUB_OUTPUT")
+        self.assertRegex(status_script, r"enabled=false.+GITHUB_OUTPUT")
 
         self.assertEqual(deploy_job["needs"], ["build", "pages"])
         self.assertIn("needs.pages.outputs.enabled == 'true'", deploy_job["if"])

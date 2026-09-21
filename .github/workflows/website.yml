@@ -62,6 +62,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
+
           status="$(curl --silent --show-error --location --output /tmp/pages.json --write-out "%{http_code}" \
             --header "Authorization: Bearer $GH_TOKEN" \
             --header "Accept: application/vnd.github+json" \

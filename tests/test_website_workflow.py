@@ -13,7 +13,7 @@ class WebsiteWorkflowTests(unittest.TestCase):
         workflow = WORKFLOW.read_text(encoding="utf-8")
 
         self.assertIn("Check GitHub Pages status", workflow)
-        self.assertIn("Authorization: " + "Bearer " + "$GH_TOKEN", workflow)
+        self.assertIn("Authorization: Bearer $GH_TOKEN", workflow)
         self.assertIn("$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/pages", workflow)
         self.assertIn('elif [ "$status" = "404" ]; then', workflow)
         self.assertIn("skipping deployment", workflow)

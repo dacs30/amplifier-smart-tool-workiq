@@ -6,3 +6,7 @@ __pycache__/
 dist/
 build/
 *.egg-info/
+
+# Generated website and preview environments
+_site/
+.work/

@@ -1,0 +1,55 @@
+{
+  "kind": "tool",
+  "key": "workiq",
+  "name": "Work IQ",
+  "accent": "#426c73",
+  "title": "Work IQ | Amplifier Smart Tools",
+  "promise": "Start with the context that matters.",
+  "description": "Turn Microsoft 365 work context into a useful briefing. Prepare for your day, walk into meetings informed, and make repeatable workflows from the questions you ask most.",
+  "image": "site/assets/workiq-flow.svg",
+  "alt": "Illustration of calendar and messages coming together as a focused work briefing.",
+  "caption": "Calendar, conversations, and work context brought together. Process illustration.",
+  "width": 1200,
+  "height": 600,
+  "flow_title": "From scattered context to a clear next step.",
+  "flow_intro": "Connect through the official Microsoft Work IQ client, then let your agent bring the relevant work into focus.",
+  "steps": [
+    [
+      "Connect your work account.",
+      "Use the official Work IQ sign-in flow to access the Microsoft 365 context available to you."
+    ],
+    [
+      "Bring the question.",
+      "Prepare a daily briefing, gather context for a meeting, or ask a focused question about your work."
+    ],
+    [
+      "Make it repeatable.",
+      "Save a domain-specific workflow with named inputs, or build a reviewable data plan for the information you need."
+    ]
+  ],
+  "detail_title": "A better way to prepare.",
+  "details": [
+    [
+      "Get ready for the day.",
+      "Choose a fast calendar-and-email context bundle or a comprehensive, synthesized briefing to prioritize your day."
+    ],
+    [
+      "Arrive with the context.",
+      "Gather relevant background for a specific meeting so your preparation starts with the work already happening."
+    ],
+    [
+      "Keep useful workflows close.",
+      "Package project reviews and recurring questions as reusable profiles. Discover resource paths and inspect schemas for precise data plans."
+    ]
+  ],
+  "prompt": "Use the Work IQ Smart Tool to prepare my Microsoft 365 daily briefing. Read workiq-smart-tool --help and its setup guide. Help me complete the official sign-in setup, then bring together my calendar and relevant work context.",
+  "install": "uv tool install git+https://github.com/dacs30/amplifier-smart-tool-workiq\nworkiq-smart-tool --help\nworkiq-smart-tool doctor --local-only",
+  "prerequisites": "Python 3.11+, uv, and Node.js 18+ with npx. Your Microsoft 365 tenant must enable Work IQ and grant its application consent.",
+  "model_note": "Work IQ uses your signed-in Microsoft 365 account and its existing permissions. The setup guide covers Microsoft's terms and the official sign-in flow.",
+  "guide": "src/amplifier_smart_tool_workiq/SMART_TOOL.md",
+  "related": [
+    "stories",
+    "possibly",
+    "showrun"
+  ]
+}

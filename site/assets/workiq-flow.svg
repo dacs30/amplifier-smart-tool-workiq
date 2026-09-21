@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="600" viewBox="0 0 1200 600" fill="none">
+<title>Work context, brought together</title><desc>Bring calendar and conversations together into a useful briefing.</desc>
+<rect width="1200" height="600" fill="#efede5"/>
+<g stroke="#d6d3c7" stroke-width="1"><path d="M60 105H1140M60 495H1140M400 140V460M800 140V460"/></g>
+<g fill="#526f5b" font-family="Arial, sans-serif" font-size="15" letter-spacing="2"><text x="60" y="66">AMPLIFIER SMART TOOLS</text><text x="1140" y="66" text-anchor="end">CONTEXT THAT MATTERS</text></g>
+<g stroke="#526f5b" stroke-width="2">
+<rect x="128" y="213" width="144" height="144"/><path d="M128 249H272M164 249V357"/><path d="M183 273H249M183 295H234M183 317H244"/>
+<circle cx="600" cy="285" r="96" stroke="#d1c9b4"/><circle cx="600" cy="285" r="64" stroke="#d1c9b4"/>
+<path d="M600 189L696 285L600 381L504 285Z"/><rect x="552" y="237" width="96" height="96" transform="rotate(20 600 285)" stroke="#92743a"/>
+<rect x="928" y="213" width="144" height="144"/><path d="M968 284L992 308L1034 262" stroke="#92743a" stroke-width="4"/>
+</g>
+<g fill="#92743a"><circle cx="600" cy="285" r="7"/><circle cx="600" cy="189" r="5"/><circle cx="696" cy="285" r="5"/><circle cx="600" cy="381" r="5"/><circle cx="504" cy="285" r="5"/></g>
+<g fill="#263d32" font-family="Georgia, serif" font-size="30" text-anchor="middle"><text x="200" y="438">Your work.</text><text x="600" y="438">Find context.</text><text x="1000" y="438">Prepare.</text></g>
+<g fill="#526f5b" font-family="Arial, sans-serif" font-size="17" text-anchor="middle"><text x="200" y="538">Calendar and conversations</text><text x="600" y="538">Microsoft Work IQ</text><text x="1000" y="538">Briefings and meeting prep</text></g>
+</svg>

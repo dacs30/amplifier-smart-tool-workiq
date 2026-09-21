@@ -44,11 +44,53 @@ jobs:
         with:
           path: _site
 
-  deploy:
+  pages:
     if: >-
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
       (github.event_name == 'workflow_dispatch' && inputs.publish)
-    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: read
+    outputs:
+      enabled: ${{ steps.status.outputs.enabled }}
+    steps:
+      - name: Check GitHub Pages status
+        id: status
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          set +e
+          status="$(curl --silent --show-error --location --output /tmp/pages.json --write-out "%{http_code}" \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header "Accept: application/vnd.github+json" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/pages")"
+          curl_exit="$?"
+          set -e
+
+          if [ "$curl_exit" -ne 0 ]; then
+            echo "::error::Unable to determine GitHub Pages status (curl exit $curl_exit)."
+            exit "$curl_exit"
+          elif [ "$status" = "200" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          elif [ "$status" = "404" ]; then
+            echo "::warning::GitHub Pages is not enabled for this repository; skipping deployment."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            cat /tmp/pages.json
+            echo "::error::Unable to determine GitHub Pages status (HTTP $status)."
+            exit 1
+          fi
+
+
+  deploy:
+    if: >-
+      needs.pages.outputs.enabled == 'true' &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && inputs.publish))
+    needs: [build, pages]
     runs-on: ubuntu-latest
     permissions:
       pages: write

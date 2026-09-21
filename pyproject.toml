@@ -26,5 +26,10 @@ classifiers = [
 [project.scripts]
 workiq-smart-tool = "amplifier_smart_tool_workiq.cli:main"
 
+[project.optional-dependencies]
+test = [
+  "PyYAML>=6.0.2,<7"
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/amplifier_smart_tool_workiq"]

@@ -13,6 +13,8 @@ WORKFLOW = ROOT / ".github" / "workflows" / "website.yml"
 class WebsiteWorkflowTests(unittest.TestCase):
     def test_deploy_job_is_skipped_when_github_pages_is_not_enabled(self):
         workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+        # PyYAML follows YAML 1.1 and parses the unquoted GitHub Actions
+        # `on:` trigger key as True, so this test intentionally inspects jobs.
         jobs = workflow["jobs"]
         pages_job = jobs["pages"]
         deploy_job = jobs["deploy"]

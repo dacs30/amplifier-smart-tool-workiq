@@ -50,7 +50,7 @@ jobs:
       (github.event_name == 'workflow_dispatch' && inputs.publish)
     runs-on: ubuntu-latest
     permissions:
-      pages: write
+      pages: read
     outputs:
       enabled: ${{ steps.status.outputs.enabled }}
     steps:
@@ -80,7 +80,10 @@ jobs:
 
 
   deploy:
-    if: needs.pages.outputs.enabled == 'true'
+    if: >-
+      needs.pages.outputs.enabled == 'true' &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && inputs.publish))
     needs: [build, pages]
     runs-on: ubuntu-latest
     permissions:

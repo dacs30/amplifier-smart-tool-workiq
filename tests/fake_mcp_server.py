@@ -62,6 +62,8 @@ for line in sys.stdin:
             }
         )
     elif method == "tools/call":
+        if not initialized:
+            raise SystemExit("Missing initialized notification")
         params = message["params"]
         if params["name"] == "ask":
             response = {

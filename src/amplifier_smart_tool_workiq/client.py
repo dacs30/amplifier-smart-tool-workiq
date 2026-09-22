@@ -7,6 +7,7 @@ import queue
 import subprocess
 import threading
 import time
+from collections import deque
 from collections.abc import Sequence
 from typing import Any
 
@@ -36,6 +37,15 @@ class WorkIqMcpClient:
         self._stderr: list[str] = []
         self._threads: list[threading.Thread] = []
         self._next_id = 1
+        self._condition = threading.Condition()
+        self._pending_requests: deque[object] = deque()
+        self._ready = False
+        self._starting = False
+        self._closing = False
+        self._closed = False
+        self._active_request = False
+        self._generation = 0
+        self._session_error: WorkIqError | None = None
 
     def __enter__(self) -> "WorkIqMcpClient":
         self.start()
@@ -45,9 +55,53 @@ class WorkIqMcpClient:
         self.close()
 
     def start(self) -> None:
-        if self._process is not None:
-            return
+        with self._condition:
+            self._condition.wait_for(
+                lambda: not self._closing and not self._active_request
+            )
+            if self._starting:
+                self._condition.wait_for(lambda: not self._starting)
+                if self._session_error:
+                    raise self._session_error
+                if self._closed:
+                    raise self._closed_error()
+            if self._ready:
+                return
+            if self._session_error:
+                self._generation += 1
+            self._starting = True
+            self._closed = False
+            self._session_error = None
 
+        try:
+            self._close_process()
+            self._messages = queue.Queue()
+            self._stderr = []
+            self._start_process()
+            with self._condition:
+                if self._closed:
+                    raise self._closed_error()
+        except BaseException as error:
+            with self._condition:
+                self._session_error = (
+                    error if isinstance(error, WorkIqError) else WorkIqError(
+                        "mcp_start_failed",
+                        "Work IQ MCP startup was interrupted.",
+                        "Call start() to retry initialization.",
+                    )
+                )
+                self._condition.notify_all()
+            self._close_process()
+            raise
+        else:
+            with self._condition:
+                self._ready = not self._closing
+        finally:
+            with self._condition:
+                self._starting = False
+                self._condition.notify_all()
+
+    def _start_process(self) -> None:
         arguments = [*self.command, "mcp", "--log-level", "Error"]
         if self.account:
             arguments.extend(["--account", self.account])
@@ -77,12 +131,8 @@ class WorkIqMcpClient:
         for thread in self._threads:
             thread.start()
 
-        try:
-            self._initialize()
-            self._notify("notifications/initialized", {})
-        except BaseException:
-            self.close()
-            raise
+        self._initialize()
+        self._notify("notifications/initialized", {})
 
     def _initialize(self) -> None:
         params = {
@@ -100,7 +150,7 @@ class WorkIqMcpClient:
                 raise self._timeout_error("initialize")
             try:
                 # Work IQ can drop stdin before its startup reader attaches.
-                self._request(
+                self._request_now(
                     "initialize",
                     params,
                     timeout=min(_INITIALIZE_RETRY_TIMEOUT, remaining),
@@ -111,6 +161,26 @@ class WorkIqMcpClient:
                     raise
 
     def close(self) -> None:
+        with self._condition:
+            if self._closing:
+                self._condition.wait_for(lambda: not self._closing)
+                return
+            self._closing = True
+            self._closed = True
+            self._ready = False
+            self._generation += 1
+            self._condition.notify_all()
+            self._condition.wait_for(
+                lambda: not self._starting and not self._active_request
+            )
+        try:
+            self._close_process()
+        finally:
+            with self._condition:
+                self._closing = False
+                self._condition.notify_all()
+
+    def _close_process(self) -> None:
         process = self._process
         self._process = None
         if process is None:
@@ -166,7 +236,65 @@ class WorkIqMcpClient:
         except json.JSONDecodeError:
             return text
 
-    def _request(
+    def _request(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
+        ticket = object()
+        deadline = time.monotonic() + self.timeout
+        with self._condition:
+            generation = self._generation
+            self._pending_requests.append(ticket)
+            self._condition.notify_all()
+            try:
+                while True:
+                    if self._closed or generation != self._generation:
+                        raise self._closed_error()
+                    if self._session_error:
+                        raise self._session_error
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise WorkIqError(
+                            "mcp_queue_timeout",
+                            f"Work IQ MCP request '{method}' waited more than "
+                            f"{self.timeout:g} seconds for a ready session.",
+                            "Call start() or use a context manager, and increase "
+                            "--timeout if startup or queued requests are slow.",
+                            retryable=True,
+                        )
+                    if (
+                        self._ready
+                        and not self._active_request
+                        and self._pending_requests[0] is ticket
+                    ):
+                        self._active_request = True
+                        break
+                    self._condition.wait(timeout=remaining)
+            except BaseException:
+                self._pending_requests.remove(ticket)
+                self._condition.notify_all()
+                raise
+
+        try:
+            return self._request_now(method, params)
+        except WorkIqError as error:
+            if error.code in ("mcp_exited", "mcp_write_failed"):
+                with self._condition:
+                    self._ready = False
+                    self._session_error = error
+            raise
+        finally:
+            with self._condition:
+                self._active_request = False
+                self._pending_requests.remove(ticket)
+                self._condition.notify_all()
+
+    @staticmethod
+    def _closed_error() -> WorkIqError:
+        return WorkIqError(
+            "mcp_closed",
+            "The Work IQ MCP session was closed before the request could run.",
+            "Call start() before submitting new requests.",
+        )
+
+    def _request_now(
         self,
         method: str,
         params: dict[str, Any],

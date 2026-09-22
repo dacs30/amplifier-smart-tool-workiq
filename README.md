@@ -270,6 +270,23 @@ The tool delegates authentication to the official `@microsoft/workiq` client:
 Reauthentication can still be required after logout, token revocation, account
 or tenant changes, Conditional Access challenges, or cache removal.
 
+MCP initialization retries unanswered handshakes every eight seconds within
+the configured `--timeout` budget to tolerate Work IQ startup delays. Tool
+calls are not automatically retried. An `mcp_timeout` can indicate slow startup
+or a slow response, not necessarily an authentication problem; retry or increase
+`--timeout`, and use `doctor` to check local prerequisites.
+
+The Python MCP client queues application requests in FIFO order until `start()`
+has completed the handshake and sent `notifications/initialized`. Concurrent
+callers share one in-flight request, preventing replies from being consumed by
+the wrong caller. Calls made before startup block; start the client in another
+thread, or use its context manager before calling tools. Queue waits are bounded
+by `timeout` and fail with `mcp_queue_timeout` without sending the request; each
+dispatched request then receives its normal response timeout. Startup failures
+and `close()` release queued callers with errors rather than silently dropping
+their requests. Closing waits for any in-flight exchange before stopping the
+server; call `start()` explicitly to open a new session after closing.
+
 ## Security model
 
 - Microsoft 365 data is treated as untrusted input.

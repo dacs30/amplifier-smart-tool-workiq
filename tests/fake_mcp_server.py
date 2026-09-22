@@ -15,14 +15,24 @@ if "--hang" in sys.argv:
     time.sleep(30)
     raise SystemExit(0)
 
+dropped_initialize = None
+initialized = False
+
 for line in sys.stdin:
     message = json.loads(line)
     method = message.get("method")
     request_id = message.get("id")
     if request_id is None:
+        if method == "notifications/initialized":
+            initialized = True
         continue
 
     if method == "initialize":
+        if "--drop-first-initialize" in sys.argv and dropped_initialize is None:
+            dropped_initialize = request_id
+            continue
+        if "--late-initialize-response" in sys.argv:
+            send({"jsonrpc": "2.0", "id": dropped_initialize, "result": None})
         send(
             {
                 "jsonrpc": "2.0",
@@ -35,6 +45,8 @@ for line in sys.stdin:
             }
         )
     elif method == "tools/list":
+        if not initialized:
+            raise SystemExit("Missing initialized notification")
         send(
             {
                 "jsonrpc": "2.0",

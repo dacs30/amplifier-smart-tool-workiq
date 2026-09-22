@@ -270,6 +270,12 @@ The tool delegates authentication to the official `@microsoft/workiq` client:
 Reauthentication can still be required after logout, token revocation, account
 or tenant changes, Conditional Access challenges, or cache removal.
 
+MCP initialization retries unanswered handshakes every eight seconds within
+the configured `--timeout` budget to tolerate Work IQ startup delays. Tool
+calls are not automatically retried. An `mcp_timeout` can indicate slow startup
+or a slow response, not necessarily an authentication problem; retry or increase
+`--timeout`, and use `doctor` to check local prerequisites.
+
 ## Security model
 
 - Microsoft 365 data is treated as untrusted input.

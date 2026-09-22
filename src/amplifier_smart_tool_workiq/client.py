@@ -14,6 +14,7 @@ from .command import workiq_command
 from .errors import WorkIqError, sanitize
 
 _PROTOCOL_VERSION = "2025-06-18"
+_INITIALIZE_RETRY_TIMEOUT = 8.0
 _STOP = object()
 
 
@@ -77,21 +78,37 @@ class WorkIqMcpClient:
             thread.start()
 
         try:
-            self._request(
-                "initialize",
-                {
-                    "protocolVersion": _PROTOCOL_VERSION,
-                    "capabilities": {},
-                    "clientInfo": {
-                        "name": "amplifier-smart-tool-workiq",
-                        "version": "0.3.0",
-                    },
-                },
-            )
+            self._initialize()
             self._notify("notifications/initialized", {})
         except BaseException:
             self.close()
             raise
+
+    def _initialize(self) -> None:
+        params = {
+            "protocolVersion": _PROTOCOL_VERSION,
+            "capabilities": {},
+            "clientInfo": {
+                "name": "amplifier-smart-tool-workiq",
+                "version": "0.3.0",
+            },
+        }
+        deadline = time.monotonic() + self.timeout
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise self._timeout_error("initialize")
+            try:
+                # Work IQ can drop stdin before its startup reader attaches.
+                self._request(
+                    "initialize",
+                    params,
+                    timeout=min(_INITIALIZE_RETRY_TIMEOUT, remaining),
+                )
+                return
+            except WorkIqError as error:
+                if error.code != "mcp_timeout":
+                    raise
 
     def close(self) -> None:
         process = self._process
@@ -149,7 +166,13 @@ class WorkIqMcpClient:
         except json.JSONDecodeError:
             return text
 
-    def _request(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
+    def _request(
+        self,
+        method: str,
+        params: dict[str, Any],
+        *,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
         request_id = self._next_id
         self._next_id += 1
         self._send(
@@ -161,28 +184,15 @@ class WorkIqMcpClient:
             }
         )
 
-        deadline = time.monotonic() + self.timeout
+        deadline = time.monotonic() + (self.timeout if timeout is None else timeout)
         while True:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                raise WorkIqError(
-                    "mcp_timeout",
-                    f"Work IQ MCP did not answer '{method}' within "
-                    f"{self.timeout:g} seconds.",
-                    "Run 'workiq-smart-tool authenticate' if sign-in is "
-                    "required, then retry.",
-                    retryable=True,
-                )
+                raise self._timeout_error(method)
             try:
                 message = self._messages.get(timeout=remaining)
             except queue.Empty as error:
-                raise WorkIqError(
-                    "mcp_timeout",
-                    f"Work IQ MCP did not answer '{method}' within "
-                    f"{self.timeout:g} seconds.",
-                    "Retry after confirming authentication.",
-                    retryable=True,
-                ) from error
+                raise self._timeout_error(method) from error
 
             if message is _STOP:
                 raise WorkIqError(
@@ -205,6 +215,17 @@ class WorkIqMcpClient:
                     "Update @microsoft/workiq and retry.",
                 )
             return result
+
+    def _timeout_error(self, method: str) -> WorkIqError:
+        return WorkIqError(
+            "mcp_timeout",
+            f"Work IQ MCP did not answer '{method}' within "
+            f"{self.timeout:g} seconds.",
+            "Retry or increase --timeout to allow for Work IQ startup or a "
+            "slow response. Run 'workiq-smart-tool doctor' to check local "
+            "prerequisites; authenticate only if sign-in is required.",
+            retryable=True,
+        )
 
     def _notify(self, method: str, params: dict[str, Any]) -> None:
         self._send({"jsonrpc": "2.0", "method": method, "params": params})
